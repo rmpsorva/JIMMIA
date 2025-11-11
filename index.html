@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>JimmyA Digital Casino | ¡La Fortuna de la Empanada!</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script type="module">
+    import { Connection, PublicKey, Transaction, clusterApiUrl } from "https://cdn.jsdelivr.net/npm/@solana/web3.js@1.73.0/+esm";
+    import { getAssociatedTokenAddress, createTransferInstruction, getAccount } from "https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.9/+esm";
+
+    // =======================================================
+    // CONSTANTES Y SELECTORES
+    // =======================================================
+    const connectBtn = document.getElementById("connect-wallet-btn");
+    const walletAddressEl = document.getElementById("wallet-address");
+    const jimmyBalanceEl = document.getElementById("jimmy-balance");
+    const loadingIndicator = document.getElementById("loading");
+    const spinBtn = document.getElementById("spin-btn");
+    const slotReels = document.querySelectorAll(".slot-reel");
+    const resultMessageEl = document.getElementById("result-message");
+    const walletSection = document.getElementById("wallet-section");
+    const connectedWalletDisplay = document.getElementById("connected-wallet-display");
+
+    let walletConnection = null; // Objeto de conexión de la wallet
+    const JIMMYA_MINT = new PublicKey("54ocizWBC3CsD5L2Zr1kvVkLx5dFPUFzTJzv2J4zuray"); // ¡CAMBIA POR EL MINT DE TU TOKEN JIMMYA!
+    const CASINO_PROGRAM_ID = new PublicKey("H44gL2B9...PROGRAM_ID"); // ¡CAMBIA POR LA DIRECCIÓN DE TU PROGRAMA DE CASINO!
+    const DECIMALS = 9;
+    const BET_AMOUNT = 50; // 50 JIMMYA por giro
+
+    // Símbolos de la slot con imágenes divertidas
+    const SYMBOLS = [
+      '<img src="https://i.imgur.com/G4j3SgO.png" alt="Empanada Pizza">', // Empanada Pizza
+      '<img src="https://i.imgur.com/vH1Zf9q.png" alt="Empanada Pollo">', // Empanada Pollo
+      '<img src="https://i.imgur.com/gK6k2mP.png" alt="Empanada Carne">', // Empanada Carne
+      '<img src="https://i.imgur.com/N7jP7P8.png" alt="Jimmy Sonriente">', // Jimmy Sonriente (premio intermedio)
+      '<img src="https://i.imgur.com/T0b3o4R.png" alt="Jimmy Jackpot">', // Jimmy Jackpot (Jackpot)
+    ];
+
+    // =======================================================
+    // FUNCIONES DE UTILIDAD
+    // =======================================================
+    function setLoading(loading) {
+      loadingIndicator.style.display = loading ? 'block' : 'none';
+      [connectBtn, spinBtn].forEach(btn => {
+        btn.disabled = loading;
+      });
+      spinBtn.classList.toggle('spinning', loading);
+    }
+
+    function isValidSolanaAddress(address) {
+      try {
+        new PublicKey(address);
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function showNotification(message, type = "info") {
+      const existing = document.querySelector('.notification');
+      if (existing) existing.remove();
+      
+      const notification = document.createElement('div');
+      notification.className = `notification ${type}`;
+      notification.textContent = message;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => notification.classList.add('show'), 10);
+      setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+      }, 7000); // Duración extendida para mensajes importantes
+    }
+
+    // =======================================================
+    // FUNCIONES DE WALLET Y BALANCE
+    // =======================================================
+    async function connectWallet() {
+      if (!window.solana || !window.solana.isPhantom) {
+        showNotification("¡Oh no! Parece que no tienes Phantom Wallet instalada. ¡Consíguela para jugar!", "error");
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        const resp = await window.solana.connect();
+        walletConnection = { 
+            publicKey: resp.publicKey, 
+            signTransaction: window.solana.signTransaction,
+            signAllTransactions: window.solana.signAllTransactions,
+            // Agrega signAndSendTransaction si está disponible directamente
+            signAndSendTransaction: window.solana.signAndSendTransaction || (async (tx) => {
+                const signedTx = await window.solana.signTransaction(tx);
+                const connection = new Connection(clusterApiUrl("devnet")); // Usar la conexión aquí
+                return { signature: await connection.sendRawTransaction(signedTx.serialize()) };
+            })
+        };
+        
+        const pubKeyStr = resp.publicKey.toString();
+        walletAddressEl.textContent = `${pubKeyStr.substring(0, 6)}...${pubKeyStr.substring(pubKeyStr.length - 6)}`;
+        
+        walletSection.classList.add('hidden');
+        connectedWalletDisplay.classList.remove('hidden');
+        spinBtn.disabled = false;
+
+        await getTokenBalance();
+        showNotification("¡Wallet conectada! ¡Prepárate para la fortuna de la empanada!", "success");
+
+      } catch (err) {
+        console.error("Error al conectar la wallet:", err);
+        showNotification("❌ ¡Oops! Fallo al conectar tu wallet. ¿La cancelaste?", "error");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function getTokenBalance() {
+      if (!walletConnection) {
+          jimmyBalanceEl.textContent = "0.00";
+          return;
+      }
+      
+      try {
+        const connection = new Connection(clusterApiUrl("devnet"));
+        const senderTokenAddr = await getAssociatedTokenAddress(JIMMYA_MINT, walletConnection.publicKey);
+        
+        try {
+          const tokenAccount = await getAccount(connection, senderTokenAddr);
+          const balance = Number(tokenAccount.amount) / 10 ** DECIMALS;
+          jimmyBalanceEl.textContent = balance.toFixed(2);
+        } catch (error) {
+          jimmyBalanceEl.textContent = "0.00"; // No hay cuenta de token asociada
+        }
+      } catch (err) {
+        console.error(err);
+        showNotification("❌ Error al obtener el balance JIMMYA", "error");
+      }
+    }
+
+    // =======================================================
+    // LÓGICA DE LA SLOT MACHINE (SIMULACIÓN DE INTERFAZ Y RESULTADO)
+    // =======================================================
+
+    function animateReels(duration) {
+        slotReels.forEach((reel, index) => {
+            const start = Date.now();
+            // Animación de giro
+            const spinInterval = setInterval(() => {
+                const randomSymbolIndex = Math.floor(Math.random() * SYMBOLS.length);
+                reel.innerHTML = SYMBOLS[randomSymbolIndex];
+            }, 75); // Más rápido para efecto de giro
+
+            // Detener la animación de giro
+            setTimeout(() => {
+                clearInterval(spinInterval);
+                // Aquí, idealmente, el Contrato Inteligente devolvería el símbolo final.
+                // Por ahora, lo dejamos en un símbolo aleatorio para simular.
+            }, duration * 1000 + index * 300); // Escalona un poco los carretes
+        });
+    }
+
+    async function spinSlot() {
+      if (!walletConnection) return showNotification("¡Conecta tu wallet, campeón!", "warning");
+
+      // Validaciones
+      const currentBalance = parseFloat(jimmyBalanceEl.textContent);
+      if (currentBalance < BET_AMOUNT) {
+          return showNotification(`¡Rayos! Necesitas ${BET_AMOUNT} JIMMYA para este giro. ¡Recarga!`, "error");
+      }
+
+      setLoading(true);
+      resultMessageEl.textContent = "¡Girando la fortuna de la empanada!";
+      animateReels(3); // Iniciar animación
+
+      try {
+        // 1. PREPARAR TRANSACCIÓN DE APUESTA (Enviar 50 JIMMYA al Programa del Casino)
+        const connection = new Connection(clusterApiUrl("devnet"));
+        const senderPubKey = walletConnection.publicKey;
+        
+        const senderTokenAddr = await getAssociatedTokenAddress(JIMMYA_MINT, senderPubKey);
+        const recipientTokenAddr = await getAssociatedTokenAddress(JIMMYA_MINT, CASINO_PROGRAM_ID);
+
+        const tx = new Transaction().add(
+          createTransferInstruction(
+            senderTokenAddr,
+            recipientTokenAddr,
+            senderPubKey,
+            BigInt(Math.floor(BET_AMOUNT * 10 ** DECIMALS))
+          )
+        );
+        tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        tx.feePayer = senderPubKey;
+
+        // 2. FIRMAR Y ENVIAR TRANSACCIÓN
+        showNotification("💰 ¡Apuesta enviada! Cruzando los dedos...", "info");
+        const { signature } = await walletConnection.signAndSendTransaction(tx);
+        await connection.confirmTransaction({ signature, ...await connection.getLatestBlockhash() }, "processed");
+        
+        showNotification(`✅ ¡Apuesta aceptada! TX: ${signature.substring(0, 8)}...`, "success");
+        
+        // 3. SIMULACIÓN DE RESULTADO DEL CASINO (Aquí iría la llamada al Contrato Inteligente real)
+        setTimeout(async () => {
+            // LÓGICA DE SIMULACIÓN (ESTO DEBE VENIR DEL CONTRATO INTELIGENTE)
+            const randomResult = Math.random();
+            let finalSymbols = [];
+            let wonAmount = 0;
+
+            if (randomResult < 0.1) { // 10% chance de Jackpot
+                finalSymbols = [SYMBOLS[4], SYMBOLS[4], SYMBOLS[4]]; // 3x Jimmy Jackpot
+                wonAmount = 500;
+                resultMessageEl.textContent = "¡BOOM! ¡JACKPOT DE EMPANADA! 🏆";
+                showNotification("🎉 ¡FELICIDADES! Has ganado 500 JIMMYA!", "success");
+            } else if (randomResult < 0.3) { // 20% chance de premio intermedio
+                finalSymbols = [SYMBOLS[3], SYMBOLS[3], SYMBOLS[3]]; // 3x Jimmy Sonriente
+                wonAmount = 150;
+                resultMessageEl.textContent = "¡Casi! ¡Jimmy te sonríe con 150 JIMMYA!";
+                showNotification("🥳 ¡Buen trabajo! Ganaste 150 JIMMYA.", "info");
+            } else if (randomResult < 0.6) { // 30% chance de un pequeño premio
+                finalSymbols = [SYMBOLS[0], SYMBOLS[0], SYMBOLS[0]]; // 3x Empanada Pizza
+                wonAmount = 75;
+                resultMessageEl.textContent = "¡Empanadas a la vista! Ganaste 75 JIMMYA.";
+                showNotification("😋 ¡Delicioso! Ganaste 75 JIMMYA.", "info");
+            }
+            else { // Perder
+                finalSymbols = [
+                    SYMBOLS[Math.floor(Math.random() * 3)], // Símbolos aleatorios
+                    SYMBOLS[Math.floor(Math.random() * 3)],
+                    SYMBOLS[Math.floor(Math.random() * 3)]
+                ];
+                resultMessageEl.textContent = "¡Uf! Inténtalo de nuevo, la fortuna espera.";
+                showNotification("😭 ¡Mala suerte! La próxima vez será.", "error");
+            }
+
+            // Actualizar carretes con los símbolos finales
+            slotReels.forEach((reel, index) => {
+                reel.innerHTML = finalSymbols[index];
+            });
+            
+            await getTokenBalance(); // Actualizar balance
+            setLoading(false);
+
+            // SIMULACIÓN: Si ganara, el Contrato Inteligente enviaría los tokens.
+            // Aquí, solo actualizamos el mensaje.
+            if (wonAmount > 0) {
+                // En una app real, el Contrato Inteligente haría esta transferencia.
+                console.log(`Simulación: Casino enviaría ${wonAmount} JIMMYA a ${senderPubKey.toString()}`);
+            }
+
+        }, 4000); // Dar tiempo para la animación y la confirmación de TX
+
+      } catch (err) {
+        console.error(err);
+        showNotification("❌ ¡Problemas en el casino! Error en el giro: " + (err.message || err), "error");
+        setLoading(false);
+      }
+    }
+
+    // Event listeners
+    connectBtn.addEventListener("click", connectWallet);
+    spinBtn.addEventListener("click", spinSlot);
+    
+    // Auto-conectar si la wallet ya está autorizada (Phantom guarda la conexión)
+    window.onload = async () => {
+        if (window.solana && window.solana.isPhantom && window.solana.isConnected) {
+            await connectWallet();
+        }
+    };
+  </script>
+
+  <style>
+    /* VARIABLES GLOBALES */
+    :root {
+      --primary-yellow: #FFD700; /* Oro divertido */
+      --secondary-green: #00FFC4; /* Ciber-Verde vibrante */
+      --accent-pink: #FF69B4; /* Rosa para detalles divertidos */
+      --bg-dark: #1a0f30; /* Fondo oscuro y profundo */
+      --bg-light: #2c1a4b; /* Tono más claro para cajas */
+      --text-light: #fff;
+      --text-dark: #333;
+      --error: #FF4444;
+      --success: #00C851;
+      --info: #33b5e5;
+      --warning: #FFBB33;
+    }
+
+    /* ESTILOS BÁSICOS */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-dark) url('https://i.imgur.com/n6Bf4vP.png') repeat; /* Fondo divertido de chips */
+      color: var(--text-light);
+      font-family: 'Poppins', sans-serif;
+      text-align: center;
+      padding: 1.5rem;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 700px;
+      width: 100%;
+      background: var(--bg-light);
+      border-radius: 25px;
+      padding: 2rem;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), 0 0 20px var(--accent-pink);
+      border: 3px solid var(--primary-yellow);
+      animation: neon-glow 1.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes neon-glow {
+        from { box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), 0 0 15px var(--accent-pink); }
+        to { box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px var(--accent-pink), 0 0 30px var(--secondary-green); }
+    }
+
+    /* TÍTULOS */
+    h1 {
+      font-family: 'Luckiest Guy', cursive;
+      color: var(--primary-yellow);
+      margin-bottom: 0.5rem;
+      font-size: 3.5rem;
+      text-shadow: 4px 4px 0px var(--accent-pink), 6px 6px 0px rgba(0,0,0,0.3);
+      letter-spacing: 2px;
+      line-height: 1;
+    }
+
+    h2 {
+        font-family: 'Luckiest Guy', cursive;
+        color: var(--secondary-green);
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        font-size: 2.2rem;
+        text-shadow: 3px 3px 0px var(--bg-dark);
+    }
+
+    .subtitle {
+      color: var(--text-light);
+      margin-bottom: 1.5rem;
+      font-size: 1.2rem;
+    }
+
+    /* SECCIÓN DE WALLET */
+    .wallet-section {
+        background: rgba(0,0,0,0.3);
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        border: 2px dashed var(--secondary-green);
+    }
+    .wallet-section.hidden, .connected-wallet-display.hidden {
+        display: none;
+    }
+
+    .connected-wallet-display {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    .wallet-address-display {
+        background: var(--bg-dark);
+        color: var(--secondary-green);
+        padding: 0.8rem 1.5rem;
+        border-radius: 10px;
+        font-family: monospace;
+        font-size: 1rem;
+        margin-top: 0.8rem;
+        border: 1px solid var(--secondary-green);
+    }
+
+    .balance-info {
+        display: flex;
+        justify-content: center;
+        align-items: baseline;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+    
+    .balance-value {
+      font-size: 2.5rem;
+      color: var(--primary-yellow);
+      font-weight: 700;
+      font-family: 'Luckiest Guy', cursive;
+      text-shadow: 2px 2px 0px var(--accent-pink);
+    }
+    .balance-value span { font-size: 0.8em; } /* JIMMYA */
+
+    /* BOTONES GLOBALES */
+    button {
+      background: var(--primary-yellow);
+      color: var(--bg-dark);
+      border: none;
+      border-radius: 10px;
+      padding: 0.9rem 1.8rem;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.8rem;
+      text-transform: uppercase;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--accent-pink);
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4), 0 0 10px var(--secondary-green);
+      color: var(--text-light);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* SLOT MACHINE */
+    .slot-area {
+      background: linear-gradient(45deg, #000, #333);
+      padding: 2rem;
+      border-radius: 20px;
+      box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.9), 0 0 25px var(--secondary-green);
+      margin-bottom: 2rem;
+      border: 5px solid var(--secondary-green);
+    }
+
+    .slot-reels {
+      display: flex;
+      justify-content: space-around;
+      gap: 15px;
+      overflow: hidden;
+      height: 150px;
+      align-items: center;
+      position: relative;
+    }
+
+    .slot-reel {
+      width: 100px;
+      height: 130px;
+      background: var(--bg-dark);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem; /* Fallback si no hay imagen */
+      color: var(--primary-yellow);
+      border: 3px solid var(--accent-pink);
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    }
+    .slot-reel img {
+        max-width: 90%;
+        max-height: 90%;
+        object-fit: contain;
+    }
+    
+    .result-message {
+      margin-top: 1.5rem;
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--secondary-green);
+      text-shadow: 2px 2px 0px var(--bg-dark);
+      min-height: 40px; /* Para evitar saltos de layout */
+    }
+    
+    /* CONTROLES DE JUEGO */
+    .controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 2rem;
+    }
+    
+    .bet-info {
+        text-align: left;
+    }
+    
+    .bet-info p {
+        font-size: 0.9rem;
+        color: #ccc;
+    }
+    
+    .bet-amount {
+        font-size: 1.5rem;
+        color: var(--primary-yellow);
+        font-weight: 700;
+        font-family: 'Luckiest Guy', cursive;
+        text-shadow: 1px 1px 0px var(--accent-pink);
+    }
+    
+    #spin-btn {
+        min-width: 180px;
+        font-size: 1.8rem;
+        padding: 1rem 2.5rem;
+        background: linear-gradient(45deg, var(--secondary-green), #00e08f);
+        color: var(--bg-dark);
+        border: 2px solid var(--text-light);
+        box-shadow: 0 7px 20px rgba(0,0,0,0.5);
+    }
+    #spin-btn:hover:not(:disabled) {
+        background: linear-gradient(45deg, #00e08f, var(--secondary-green));
+        transform: translateY(-4px) scale(1.03);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.6), 0 0 15px var(--text-light);
+    }
+    #spin-btn.spinning {
+        animation: pulse-spin 0.8s infinite alternate;
+    }
+    @keyframes pulse-spin {
+        from { transform: scale(1); box-shadow: 0 7px 20px rgba(0,0,0,0.5); }
+        to { transform: scale(1.05); box-shadow: 0 7px 25px rgba(0,0,0,0.7), 0 0 15px var(--secondary-green); }
+    }
+
+
+    /* INFORMACIÓN DEL TOKEN */
+    .token-info {
+        background: var(--bg-light);
+        border-radius: 20px;
+        padding: 2rem;
+        margin-top: 3rem;
+        border: 2px dashed var(--primary-yellow);
+        box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+    }
+    .token-info h3 {
+        font-family: 'Luckiest Guy', cursive;
+        color: var(--primary-yellow);
+        font-size: 1.8rem;
+        margin-bottom: 1.5rem;
+        text-shadow: 2px 2px 0px var(--accent-pink);
+    }
+    .token-details {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        text-align: left;
+    }
+    .token-detail-item {
+        background: rgba(0,0,0,0.2);
+        padding: 1rem;
+        border-radius: 10px;
+        border-left: 5px solid var(--secondary-green);
+    }
+    .token-detail-item p { margin-bottom: 0.3rem; }
+    .token-detail-item strong { color: var(--secondary-green); }
+    .token-detail-item span { color: var(--primary-yellow); font-weight: 600; }
+
+    /* ESTILOS DE UTILIDAD (CARGA Y NOTIFICACIONES) */
+    .loading {
+      display: none;
+      margin: 1.5rem 0;
+      color: var(--secondary-green);
+      font-size: 1.1rem;
+    }
+
+    .spinner {
+      border: 4px solid rgba(0, 255, 196, 0.3);
+      border-radius: 50%;
+      border-top: 4px solid var(--secondary-green);
+      width: 35px;
+      height: 35px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 0.8rem;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .notification {
+      position: fixed;
+      top: 25px;
+      right: 25px;
+      padding: 1rem 1.5rem;
+      border-radius: 12px;
+      color: white;
+      font-weight: 600;
+      z-index: 1000;
+      transform: translateX(500px);
+      opacity: 0;
+      transition: all 0.5s ease-out;
+      max-width: 350px;
+      word-break: break-word;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    .notification.show { transform: translateX(0); opacity: 1; }
+    .notification.success { background: var(--success); }
+    .notification.error { background: var(--error); }
+    .notification.info { background: var(--info); }
+    .notification.warning { background: var(--warning); color: var(--text-dark); }
+    
+    /* RESPONSIVE */
+    @media (max-width: 600px) {
+      body { padding: 1rem; }
+      h1 { font-size: 2.5rem; }
+      .subtitle { font-size: 1rem; }
+      .balance-value { font-size: 2rem; }
+      .slot-reel { width: 90px; height: 120px; font-size: 2.5rem; }
+      #spin-btn { font-size: 1.5rem; padding: 0.8rem 1.5rem; min-width: 140px; }
+      .notification { left: 10px; right: 10px; max-width: none; }
+      .token-info { padding: 1.5rem; }
+      .token-info h3 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>JIMMYA DIGITAL CASINO</h1>
+    <p class="subtitle">¡La Fortuna de la Empanada te espera en Solana! 🚀</p>
+    
+    <div class="wallet-section" id="wallet-section">
+        <p>Para empezar a jugar y ganar $JIMMYA, ¡conecta tu Phantom Wallet!</p>
+        <button id="connect-wallet-btn">
+            <img src="https://phantom.app/ul/v1/logomark.svg" alt="Phantom Logo" width="24" height="24"> Conectar Phantom
+        </button>
+    </div>
+
+    <div class="connected-wallet-display hidden" id="connected-wallet-display">
+        <p>¡Wallet de Empanadas Conectada!</p>
+        <div class="wallet-address-display" id="wallet-address"></div>
+        <div class="balance-info">
+            Tu Balance: <span class="balance-value" id="jimmy-balance">0.00</span> JIMMYA
+        </div>
+    </div>
+    
+    <div class="slot-area">
+        <div class="slot-reels">
+            <div class="slot-reel">?</div>
+            <div class="slot-reel">?</div>
+            <div class="slot-reel">?</div>
+        </div>
+        
+        <p class="result-message" id="result-message">¡Gira para descubrir tu fortuna!</p>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Preparando tu giro mágico en Solana...</p>
+        </div>
+
+        <div class="controls">
+            <div class="bet-info">
+                <p>Tu Apuesta por Giro:</p>
+                <div class="bet-amount">50 $JIMMYA</div>
+                <p>¡Jackpot Empanada: 500 $JIMMYA!</p>
+            </div>
+            <button id="spin-btn" disabled>
+                <span>✨</span> ¡GIRAR!
+            </button>
+        </div>
+    </div>
+
+    <div class="token-info">
+        <h3>Acerca del Token JIMMYA 🪙</h3>
+        <div class="token-details">
+            <div class="token-detail-item">
+                <p><strong>Tipo de Moneda:</strong></p>
+                <span>Criptomoneda de Utilidad Exclusiva para la diversión de JimmyA.</span>
+            </div>
+            <div class="token-detail-item">
+                <p><strong>Blockchain:</strong></p>
+                <span>Solana (SOL) ⚡ ¡Rápido y furioso!</span>
+            </div>
+            <div class="token-detail-item">
+                <p><strong>Suministro Total:</strong></p>
+                <span>100,000,000 (Cien millones de monedas)</span>
+            </div>
+            <div class="token-detail-item">
+                <p><strong>Valor de Compra:</strong></p>
+                <span>0.01 USD (Un centavo) por 1 JIMMYA Coin</span>
+            </div>
+            <div class="token-detail-item">
+                <p><strong>Utilidad Principal:</strong></p>
+                <span>¡El método ÚNICO para comprar las Empanadas Secretas de Jimmy (Pizza, Pollo, Carne)!</span>
+            </div>
+            <div class="token-detail-item">
+                <p><strong>Costo por Empanada:</strong></p>
+                <span>500 JIMMYA Coins (equivalente a $5 USD)</span>
+            </div>
+            <div class="token-detail-item">
+                <p><strong>Exclusividad:</strong></p>
+                <span>Las Empanadas solo se compran con este token, ¡debido a los ingredientes secretos de Jimmy!</span>
+            </div>
+        </div>
+    </div>
+    
+    <p style="font-size: 0.8rem; color: #777; margin-top: 2rem;">
+        *Este juego simula la lógica del casino. Para una operación real y segura, se requiere un Contrato Inteligente en Solana.
+    </p>
+
+  </div>
+</body>
+</html>
