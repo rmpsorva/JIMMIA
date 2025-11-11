@@ -1,14 +1,136 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/jimmy-a_coin_icon.png" /> 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>JIMMY-A DIGITAL FUTURE: El Menú Criptográfico | $JIMMYA Solana</title>
-    <link rel="stylesheet" href="/src/App.css">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JIMMYA DIGITAL FUTURE: El Menú Criptográfico | $JIMMYA Solana</title>
+
+  <!-- Fuente y estilo -->
+  <style>
+    :root {
+      --color-neon: #00ff99;
+      --color-sabor: #ff9900;
+      --color-peligro: #ff3333;
+      --color-fondo-oscuro: #0d0d0d;
+    }
+
+    body {
+      background: var(--color-fondo-oscuro);
+      color: var(--color-neon);
+      font-family: 'Arial Black', Gadget, sans-serif;
+      text-align: center;
+      padding: 25px;
+    }
+
+    h1 {
+      text-shadow: 0 0 12px var(--color-neon);
+    }
+
+    .dashboard-cocina-digital {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 40px;
+      background: rgba(0, 0, 0, 0.9);
+      border: 3px solid var(--color-neon);
+      border-radius: 20px;
+      box-shadow: 0 0 25px var(--color-neon);
+    }
+
+    button {
+      padding: 15px 30px;
+      background: linear-gradient(90deg, var(--color-sabor), var(--color-peligro));
+      color: white;
+      font-weight: bold;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      margin-top: 20px;
+      box-shadow: 0 0 10px var(--color-sabor);
+      transition: transform 0.2s ease;
+    }
+
+    button:hover {
+      transform: scale(1.1);
+    }
+
+    footer {
+      margin-top: 40px;
+      font-size: 0.9em;
+      opacity: 0.7;
+    }
+  </style>
+
+  <!-- React + ReactDOM + Babel (CDN) -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <footer>
+    🥟 JimmyA Digital Future © 2025 — Powered by Solana, React & Neon Code
+  </footer>
+
+  <script type="text/babel">
+
+    // ==============================
+    // COMPONENTE PRINCIPAL
+    // ==============================
+    function Dashboard() {
+      const [connected, setConnected] = React.useState(false);
+      const [walletAddress, setWalletAddress] = React.useState("");
+      const [price, setPrice] = React.useState(0.00001813);
+      const [balance, setBalance] = React.useState(0);
+
+      const JIMMYA_PER_EMPANADA = 500;
+
+      const connectWallet = async () => {
+        if (window.solana && window.solana.isPhantom) {
+          try {
+            const resp = await window.solana.connect();
+            setWalletAddress(resp.publicKey.toString());
+            setConnected(true);
+            setBalance(4500); // demo balance
+          } catch (err) {
+            console.error("Error al conectar wallet:", err);
+          }
+        } else {
+          alert("⚠️ Instala Phantom Wallet para continuar.");
+        }
+      };
+
+      const empanadas = Math.floor(balance / JIMMYA_PER_EMPANADA);
+
+      return (
+        <div className="dashboard-cocina-digital">
+          {!connected ? (
+            <>
+              <h1>⚡ Bienvenido a JimmyA Digital Future</h1>
+              <p>El menú criptográfico más sabroso en la red de Solana 🍽️</p>
+              <button onClick={connectWallet}>🔗 Conectar Phantom Wallet</button>
+            </>
+          ) : (
+            <>
+              <h1>🧑‍🍳 La Cocina Digital de JimmyA</h1>
+              <p><strong>Wallet:</strong> {walletAddress}</p>
+              <h3>VALOR DEL TOKEN</h3>
+              <p>${price.toFixed(8)} USD por JIMMYA</p>
+              <h3>TU BALANCE</h3>
+              <p>{balance} JIMMYA = {empanadas} Empanadas Secretas</p>
+              <button disabled={empanadas === 0}>
+                {empanadas > 0 ? "🔥 ¡Reclamar Empanada Digital!" : "Necesitas más JIMMYA"}
+              </button>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    // Renderizado principal
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<Dashboard />);
+  </script>
+</body>
 </html>
