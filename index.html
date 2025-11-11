@@ -3,6 +3,120 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JimmyA Digital Future ⚡ Solana</title>
+
+  <style>
+    body {
+      background-color: #000;
+      color: #00ffcc;
+      font-family: 'Orbitron', sans-serif;
+      text-align: center;
+      padding: 40px;
+    }
+    h1 {
+      font-size: 2.2em;
+      text-shadow: 0 0 10px #00ffcc;
+    }
+    p {
+      color: #ccc;
+      font-size: 1.1em;
+    }
+    .panel {
+      border: 2px solid #00ffcc;
+      border-radius: 12px;
+      box-shadow: 0 0 20px #00ffcc;
+      padding: 30px;
+      max-width: 400px;
+      margin: 50px auto;
+      background: rgba(0, 255, 204, 0.05);
+    }
+    button {
+      background: linear-gradient(90deg, #00ffcc, #0066ff);
+      color: #fff;
+      border: none;
+      padding: 15px 25px;
+      border-radius: 8px;
+      font-size: 1.1em;
+      cursor: pointer;
+      transition: 0.3s;
+      margin-top: 20px;
+    }
+    button:hover {
+      transform: scale(1.08);
+      box-shadow: 0 0 12px #00ffcc;
+    }
+    footer {
+      margin-top: 50px;
+      color: #008877;
+      font-size: 0.9em;
+    }
+    .glow {
+      animation: neon 1.5s ease-in-out infinite alternate;
+    }
+    @keyframes neon {
+      from { text-shadow: 0 0 5px #00ffcc, 0 0 10px #00ffcc; }
+      to { text-shadow: 0 0 20px #00ffcc, 0 0 30px #00ffff; }
+    }
+  </style>
+</head>
+<body>
+  <h1 class="glow">🍤 JimmyA Digital Future</h1>
+  <p>Bienvenido al menú criptográfico en la red Solana ⚡</p>
+
+  <div class="panel" id="wallet-panel">
+    <h3>🔗 Estado: <span id="status">Desconectado</span></h3>
+    <button id="connect-btn">Conectar Phantom Wallet</button>
+    <div id="wallet-info" style="display:none;">
+      <p><strong>Wallet:</strong> <span id="address"></span></p>
+      <p><strong>Balance:</strong> <span id="balance">0</span> JIMMYA</p>
+      <button id="claim-btn">🔥 Reclamar Empanada Digital</button>
+    </div>
+  </div>
+
+  <footer>🥟 JimmyA Digital Future © 2025 — Powered by Solana & Neon Code</footer>
+
+  <script>
+    const connectBtn = document.getElementById("connect-btn");
+    const statusEl = document.getElementById("status");
+    const walletInfo = document.getElementById("wallet-info");
+    const addressEl = document.getElementById("address");
+    const balanceEl = document.getElementById("balance");
+    const claimBtn = document.getElementById("claim-btn");
+
+    async function connectWallet() {
+      if (window.solana && window.solana.isPhantom) {
+        try {
+          const resp = await window.solana.connect();
+          const wallet = resp.publicKey.toString();
+          addressEl.textContent = wallet;
+          statusEl.textContent = "Conectado ✅";
+          walletInfo.style.display = "block";
+          connectBtn.style.display = "none";
+          // Simula balance aleatorio
+          const randomBalance = (Math.random() * 5000 + 100).toFixed(2);
+          balanceEl.textContent = randomBalance;
+        } catch (err) {
+          console.log("Error al conectar:", err);
+          alert("❌ Error al conectar Phantom Wallet.");
+        }
+      } else {
+        alert("⚠️ Instala Phantom Wallet para conectarte: https://phantom.app");
+      }
+    }
+
+    connectBtn.addEventListener("click", connectWallet);
+
+    claimBtn.addEventListener("click", () => {
+      alert("🎉 ¡Empanada Digital Reclamada con Éxito!");
+    });
+  </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>JIMMYA DIGITAL FUTURE: El Menú Criptográfico | $JIMMYA Solana</title>
 
   <!-- Fuente y estilo -->
