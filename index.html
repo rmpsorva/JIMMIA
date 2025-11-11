@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>JimmyA Digital Casino | Empanada Fortune Slot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script type="module">
+    import { Connection, PublicKey, Transaction, clusterApiUrl } from "https://cdn.jsdelivr.net/npm/@solana/web3.js@1.73.0/+esm";
+    import { getAssociatedTokenAddress, createTransferInstruction, getAccount } from "https://cdn.jsdelivr.net/npm/@solana/spl-token@0.3.9/+esm";
+
+    // =======================================================
+    // CONSTANTES Y SELECTORES
+    // =======================================================
+    const connectBtn = document.getElementById("connect-wallet");
+    const walletAddressEl = document.getElementById("wallet-address");
+    const jimmyBalanceEl = document.getElementById("jimmy-balance");
+    const loadingIndicator = document.getElementById("loading");
+    const spinBtn = document.getElementById("spin-btn");
+    const slotReels = document.querySelectorAll(".slot-reel");
+    const resultMessageEl = document.getElementById("result-message");
+
+    let wallet;
+    const JIMMYA_MINT = new PublicKey("54ocizWBC3CsD5L2Zr1kvVkLx5dFPUFzTJzv2J4zuray");
+    const CASINO_PROGRAM_ID = new PublicKey("H44gL2B9...PROGRAM_ID"); // *** REEMPLAZAR con la dirección real del Contrato Inteligente ***
+    const DECIMALS = 9;
+    const BET_AMOUNT = 50; // 50 JIMMYA por giro
+
+    // =======================================================
+    // FUNCIONES DE UTILIDAD
+    // =======================================================
+    function setLoading(loading) {
+      loadingIndicator.style.display = loading ? 'block' : 'none';
+      [connectBtn, spinBtn].forEach(btn => {
+        btn.disabled = loading;
+      });
+    }
+
+    function isValidSolanaAddress(address) {
+      try {
+        new PublicKey(address);
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function showNotification(message, type) {
+      // Implementación de notificaciones (simplificada para este ejemplo)
+      const existing = document.querySelector('.notification');
+      if (existing) existing.remove();
+      
+      const notification = document.createElement('div');
+      notification.className = `notification ${type}`;
+      notification.textContent = message;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => notification.classList.add('show'), 10);
+      setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+      }, 5000);
+    }
+
+    // =======================================================
+    // FUNCIONES DE WALLET Y BALANCE
+    // =======================================================
+    async function connectWallet() {
+      if (window.solana && window.solana.isPhantom) {
+        try {
+          setLoading(true);
+          wallet = window.solana;
+          const resp = await wallet.connect();
+          walletAddressEl.textContent = resp.publicKey.toString();
+          connectBtn.disabled = true;
+          connectBtn.textContent = "🔗 Conectado";
+          spinBtn.disabled = false;
+          await getTokenBalance();
+        } catch (err) {
+          console.error(err);
+          showNotification("❌ Error al conectar la wallet", "error");
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        showNotification("Instala Phantom Wallet", "warning");
+      }
+    }
+
+    async function getTokenBalance() {
+      if (!wallet) return;
+      
+      try {
+        const connection = new Connection(clusterApiUrl("devnet"));
+        const senderTokenAddr = await getAssociatedTokenAddress(JIMMYA_MINT, wallet.publicKey);
+        
+        try {
+          const tokenAccount = await getAccount(connection, senderTokenAddr);
+          const balance = Number(tokenAccount.amount) / 10 ** DECIMALS;
+          jimmyBalanceEl.textContent = balance.toFixed(2);
+        } catch (error) {
+          jimmyBalanceEl.textContent = "0.00";
+        }
+      } catch (err) {
+        console.error(err);
+        showNotification("❌ Error al obtener balance", "error");
+      }
+    }
+
+    // =======================================================
+    // LÓGICA DE LA SLOT MACHINE (SIMULACIÓN DE INTERFAZ)
+    // =======================================================
+
+    const SYMBOLS = [
+      '🍕', '🍗', '🥟', '🍤', '👑'
+    ]; 
+
+    function animateReels(duration) {
+        slotReels.forEach((reel, index) => {
+            const start = Date.now();
+            const interval = setInterval(() => {
+                const randomSymbolIndex = Math.floor(Math.random() * SYMBOLS.length);
+                reel.textContent = SYMBOLS[randomSymbolIndex];
+            }, 100);
+
+            setTimeout(() => {
+                clearInterval(interval);
+                // Aquí se debe poner el SÍMBOLO REAL devuelto por el Contrato Inteligente
+                // Por ahora, lo dejamos en un símbolo aleatorio para simular el final.
+                // Si ganara el Jackpot, el último reel mostraría '👑'
+            }, duration * 1000 + index * 500); // Duración ligeramente escalonada
+        });
+    }
+
+    async function spinSlot() {
+      if (!wallet) return showNotification("Conecta tu wallet primero", "warning");
+
+      // Validaciones
+      const currentBalance = parseFloat(jimmyBalanceEl.textContent);
+      if (currentBalance < BET_AMOUNT) {
+          return showNotification(`❌ Saldo insuficiente. Se requieren ${BET_AMOUNT} JIMMYA`, "error");
+      }
+
+      try {
+        setLoading(true);
+        resultMessageEl.textContent = "¡Girando!";
+
+        // 1. PREPARAR TRANSACCIÓN DE APUESTA (Enviar 50 JIMMYA al Programa del Casino)
+        const connection = new Connection(clusterApiUrl("devnet"));
+        const senderPubKey = wallet.publicKey;
+        
+        const senderTokenAddr = await getAssociatedTokenAddress(JIMMYA_MINT, senderPubKey);
+        const recipientTokenAddr = await getAssociatedTokenAddress(JIMMYA_MINT, CASINO_PROGRAM_ID);
+
+        const tx = new Transaction().add(
+          createTransferInstruction(
+            senderTokenAddr,
+            recipientTokenAddr,
+            senderPubKey,
+            BigInt(Math.floor(BET_AMOUNT * 10 ** DECIMALS))
+          )
+        );
+        tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        tx.feePayer = senderPubKey;
+
+        // 2. FIRMAR Y ENVIAR TRANSACCIÓN
+        showNotification("🎰 Enviando apuesta de 50 $JIMMYA...", "info");
+        const signedTx = await wallet.signTransaction(tx);
+        const signature = await connection.sendRawTransaction(signedTx.serialize());
+        await connection.confirmTransaction({ signature, ...await connection.getLatestBlockhash() }, "processed");
+        
+        showNotification(`✅ Apuesta enviada! Esperando resultado...`, "info");
+        
+        // 3. INICIAR ANIMACIÓN (Simulado)
+        animateReels(3); // 3 segundos de giro
+        
+        // **FALTA: Lógica para leer el resultado del Contrato Inteligente y el posible pago**
+        setTimeout(async () => {
+            // SIMULACIÓN DE RESULTADO: 20% chance de ganar
+            const won = Math.random() < 0.2; 
+            
+            if (won) {
+                resultMessageEl.textContent = "¡JACKPOT! 🏆 Has ganado 500 JIMMYA";
+                showNotification("🎉 ¡FELICIDADES! ¡Has ganado el Jackpot de la Empanada!", "success");
+            } else {
+                resultMessageEl.textContent = "Prueba otra vez 😟";
+                showNotification("😢 No hay suerte. La casa gana.", "error");
+            }
+            await getTokenBalance(); // Actualizar balance
+            setLoading(false);
+        }, 3500);
+
+      } catch (err) {
+        console.error(err);
+        showNotification("❌ Error en el giro: " + err.message, "error");
+        setLoading(false);
+      }
+    }
+
+    // Event listeners
+    connectBtn.addEventListener("click", connectWallet);
+    spinBtn.addEventListener("click", spinSlot);
+    
+    // Iniciar balance al cargar si la wallet ya está conectada (opcional)
+    if (window.solana && window.solana.isPhantom && window.solana.isConnected) {
+        connectWallet();
+    }
+  </script>
+
+  <style>
+    :root {
+      --primary: #ffd700; /* Oro */
+      --secondary: #00ffc4; /* Ciber-Verde */
+      --bg-dark: #121212;
+      --bg-light: #1e1e1e;
+      --text: #fff;
+      --error: #ff4444;
+      --success: #00C851;
+      --info: #33b5e5;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-dark);
+      color: var(--text);
+      font-family: "Poppins", sans-serif;
+      text-align: center;
+      padding: 2rem;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      max-width: 650px;
+      width: 100%;
+      background: var(--bg-light);
+      border-radius: 20px;
+      padding: 2rem;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.5), 0 0 10px var(--secondary);
+    }
+
+    h1 {
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+      font-size: 2.8rem;
+      font-family: 'Orbitron', sans-serif;
+      text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    }
+
+    .subtitle {
+      color: var(--secondary);
+      margin-bottom: 2rem;
+      font-size: 1.1rem;
+      text-shadow: 0 0 5px rgba(0, 255, 196, 0.3);
+    }
+
+    /* --- ENCABEZADO Y BALANCE --- */
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      padding: 0.8rem;
+      background: #252525;
+      border-radius: 10px;
+      border: 1px solid #333;
+    }
+
+    .balance-info {
+      text-align: left;
+    }
+    
+    .balance-info p {
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+    
+    .balance-value {
+      font-size: 1.5rem;
+      color: var(--secondary);
+      font-weight: 700;
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    .wallet-address {
+      font-size: 0.7rem;
+      font-family: monospace;
+      color: #999;
+      margin-top: 0.3rem;
+      word-break: break-all;
+    }
+
+    button {
+      background: var(--primary);
+      color: var(--bg-dark);
+      border: none;
+      border-radius: 8px;
+      padding: 0.6rem 1.2rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      white-space: nowrap;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--primary);
+      transform: translateY(-1px);
+      box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    /* --- SLOT MACHINE --- */
+    .slot-area {
+      background: #000;
+      padding: 1.5rem;
+      border-radius: 15px;
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8), 0 0 10px var(--secondary);
+      margin-bottom: 1.5rem;
+    }
+
+    .slot-reels {
+      display: flex;
+      justify-content: space-around;
+      gap: 10px;
+      overflow: hidden;
+      height: 120px;
+      align-items: center;
+    }
+
+    .slot-reel {
+      width: 33.33%;
+      height: 100%;
+      background: #333;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 4rem;
+      font-family: 'Orbitron', sans-serif;
+      color: var(--primary);
+      text-shadow: 0 0 10px var(--primary);
+      border: 3px solid var(--secondary);
+    }
+    
+    .slot-reels::before,
+    .slot-reels::after {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 10px;
+        background: rgba(255, 255, 255, 0.2);
+        z-index: 10;
+        pointer-events: none;
+    }
+    
+    .slot-reels::before { top: 1.5rem; }
+    .slot-reels::after { bottom: 1.5rem; }
+
+    .result-message {
+      margin-top: 1rem;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--secondary);
+    }
+    
+    /* --- CONTROLES DE JUEGO --- */
+    .controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 1.5rem;
+        padding: 0 1rem;
+    }
+    
+    .bet-info {
+        text-align: left;
+    }
+    
+    .bet-info p {
+        font-size: 0.9rem;
+        color: #aaa;
+    }
+    
+    .bet-amount {
+        font-size: 1.2rem;
+        color: var(--primary);
+        font-weight: 700;
+    }
+    
+    #spin-btn {
+        min-width: 150px;
+        font-size: 1.5rem;
+        padding: 1rem 2rem;
+        background: var(--secondary);
+        color: var(--bg-dark);
+    }
+    
+    #spin-btn:hover:not(:disabled) {
+        box-shadow: 0 0 20px var(--secondary);
+    }
+
+    /* --- ESTILOS DE UTILIDAD (CARGA Y NOTIFICACIONES) --- */
+    .loading {
+      display: none;
+      margin: 1rem 0;
+      color: var(--secondary);
+    }
+
+    .spinner {
+      border: 4px solid rgba(0, 255, 196, 0.3);
+      border-radius: 50%;
+      border-top: 4px solid var(--secondary);
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 0.5rem;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      color: white;
+      font-weight: 500;
+      z-index: 1000;
+      transform: translateX(400px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      max-width: 400px;
+    }
+    
+    .notification.show { transform: translateX(0); opacity: 1; }
+    .notification.success { background: var(--success); }
+    .notification.error { background: var(--error); }
+    .notification.info { background: var(--info); }
+    
+    @media (max-width: 650px) {
+        .controls {
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .header-bar {
+            flex-direction: column;
+            gap: 1rem;
+        }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>JIMMYA DIGITAL FUTURE</h1>
+    <p class="subtitle">🎰 Empanada Fortune Slot - Powered by Solana ⚡</p>
+    
+    <div class="header-bar">
+        <div class="balance-info">
+            <p>Balance $JIMMYA:</p>
+            <div class="balance-value"><span id="jimmy-balance">0.00</span> JIMMYA</div>
+            <div class="wallet-address" id="wallet-address">Wallet no conectada</div>
+        </div>
+        <button id="connect-wallet">
+            <span>🔗</span> Conectar Phantom
+        </button>
+    </div>
+    
+    <div class="slot-area">
+        <div class="slot-reels">
+            <div class="slot-reel">?</div>
+            <div class="slot-reel">?</div>
+            <div class="slot-reel">?</div>
+        </div>
+        
+        <p class="result-message" id="result-message">¡Gira para reclamar tu Empanada!</p>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Procesando transacción en Solana...</p>
+        </div>
+
+        <div class="controls">
+            <div class="bet-info">
+                <p>Apuesta:</p>
+                <div class="bet-amount">50 $JIMMYA</div>
+                <p>Jackpot: 500 $JIMMYA</p>
+            </div>
+            <button id="spin-btn" disabled>
+                <span>🎲</span> SPIN
+            </button>
+        </div>
+    </div>
+    
+    <p style="font-size: 0.8rem; color: #555; margin-top: 1rem;">
+        *La lógica de ganancias es determinada por el Contrato Inteligente en Solana para asegurar un juego justo.
+    </p>
+
+  </div>
+</body>
+</html>
