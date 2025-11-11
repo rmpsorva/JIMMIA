@@ -1,0 +1,23 @@
+:root {
+    --color-neon: #00ff99;
+    --color-sabor: #ff9900;
+    --color-peligro: #ff3333;
+    --color-fondo-oscuro: #0d0d0d;
+}
+
+body {
+    background: var(--color-fondo-oscuro);
+    color: var(--color-neon);
+    font-family: 'Arial Black', Gadget, sans-serif;
+    text-align: center;
+    padding: 20px;
+}
+
+.dashboard-cocina-digital {
+    max-width: 900px;
+    margin: 30px auto;
+    padding: 40px;
+    background: rgba(0, 0, 0, 0.9);
+    border: 3px solid var(--color-neon);
+    border-radius: 20px;
+}
